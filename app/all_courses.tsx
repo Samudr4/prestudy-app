@@ -1,0 +1,280 @@
+import React, { useState, useEffect } from "react";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, StatusBar, Platform } from "react-native";
+import { useRouter } from "expo-router";
+import { AntDesign } from '@expo/vector-icons';
+import config from "./config";
+
+export default function AllCoursesScreen() {
+  const router = useRouter();
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch(config.CATEGORY_API);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch categories: ${response.status}`);
+      }
+      const data = await response.json();
+      if (!data.success || !data.data) {
+        throw new Error("No categories available");
+      }
+      setCategories(Array.isArray(data.data) ? data.data : []);
+    } catch (error) {
+      console.error("Error fetching categories:", error);
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderBookIcon = () => (
+    <View style={styles.bookIconContainer}>
+      <View style={styles.bookIconInner}>
+        <View style={styles.bookPage}></View>
+        <View style={styles.bookPage2}></View>
+      </View>
+      <View style={styles.handIcon}></View>
+    </View>
+  );
+
+  const renderCategory = ({ item }) => (
+    <TouchableOpacity 
+      style={styles.card}
+      onPress={() => router.push({
+        pathname: "/category_details",
+        params: { categoryId: item._id, categoryName: item.name }
+      })}
+    >
+      <View style={styles.bookIconContainer}>
+        {renderBookIcon()}
+      </View>
+      <Text style={styles.categoryName}>{item.name}</Text>
+      {item.description && (
+        <Text style={styles.categoryDescription} numberOfLines={2}>
+          {item.description}
+        </Text>
+      )}
+    </TouchableOpacity>
+  );
+
+  const headerComponent = () => (
+    <View style={styles.header}>
+      <Text style={styles.headerTitle}>All Course Categories</Text>
+    </View>
+  );
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <StatusBar backgroundColor="#f5f5f5" barStyle="dark-content" />
+        <ActivityIndicator size="large" color="#4169E1" />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.errorContainer}>
+        <StatusBar backgroundColor="#f5f5f5" barStyle="dark-content" />
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity 
+          style={styles.retryButton}
+          onPress={fetchCategories}
+        >
+          <Text style={styles.retryText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <StatusBar backgroundColor="#f5f5f5" barStyle="dark-content" />
+      <FlatList
+        data={categories}
+        renderItem={renderCategory}
+        keyExtractor={(item) => item._id.toString()}
+        contentContainerStyle={styles.list}
+        numColumns={2}
+        columnWrapperStyle={styles.columnWrapper}
+        ListHeaderComponent={headerComponent}
+        ListEmptyComponent={<Text style={styles.emptyMessage}>No categories available</Text>}
+      />
+      
+      <View style={styles.bottomNavigation}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/home')}>
+          <AntDesign name="compass" size={24} color="#666" />
+          <Text style={styles.navText}>Explore</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={[styles.navItem, styles.activeNavItem]}>
+          <AntDesign name="book" size={24} color="#FF3B30" />
+          <Text style={[styles.navText, styles.activeNavText]}>All Course</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/my_courses')}>
+          <AntDesign name="check" size={24} color="#666" />
+          <Text style={styles.navText}>My Course</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/profile')}>
+          <AntDesign name="user" size={24} color="#666" />
+          <Text style={styles.navText}>Profile</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#f5f5f5",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: "#f5f5f5",
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: "#f5f5f5",
+  },
+  errorText: {
+    color: "#FF3B30",
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: "#4169E1",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryText: {
+    color: "#fff",
+    fontWeight: "bold",
+  },
+  header: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#f5f5f5',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  list: {
+    padding: 8,
+  },
+  columnWrapper: {
+    justifyContent: 'space-between',
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        boxShadow: '0px 2px 4px rgba(0,0,0,0.2)',
+      },
+      android: {
+        elevation: 4,
+      },
+      web: {
+        boxShadow: '0px 2px 4px rgba(0,0,0,0.2)',
+      },
+    }),
+  },
+  bookIconContainer: {
+    width: 60,
+    height: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bookIconInner: {
+    flexDirection: 'row',
+    marginBottom: 5,
+  },
+  bookPage: {
+    width: 25,
+    height: 35,
+    backgroundColor: '#4169E1',
+    borderRadius: 3,
+  },
+  bookPage2: {
+    width: 25,
+    height: 35,
+    backgroundColor: '#4169E1',
+    borderRadius: 3,
+    marginLeft: 5,
+  },
+  handIcon: {
+    width: 40,
+    height: 15,
+    backgroundColor: '#4169E1',
+    borderRadius: 5,
+    transform: [{ rotate: '10deg' }],
+  },
+  categoryName: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+    textAlign: 'center',
+    marginVertical: 8,
+  },
+  categoryDescription: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+  },
+  ratingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  ratingText: {
+    fontSize: 12,
+    color: '#666',
+  },
+  emptyMessage: {
+    textAlign: "center",
+    fontSize: 16,
+    color: "#666",
+    marginTop: 20,
+  },
+  bottomNavigation: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#e0e0e0',
+    paddingVertical: 10,
+    justifyContent: 'space-around',
+  },
+  navItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activeNavItem: {
+    borderBottomWidth: 0,
+  },
+  navText: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#666',
+  },
+  activeNavText: {
+    color: '#FF3B30',
+  },
+});
