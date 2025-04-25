@@ -1,257 +1,161 @@
 import React, { useState, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image, Animated, Easing, ScrollView } from "react-native";
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, Image, Dimensions } from "react-native";
 import { BottomNavigation } from "react-native-paper";
 import { useRouter } from "expo-router";
 import config from "./config";
-import { Dimensions } from "react-native";
-import { AntDesign } from '@expo/vector-icons';
+import { AntDesign, FontAwesome, Feather, MaterialIcons } from '@expo/vector-icons';
 
 const screenWidth = Dimensions.get("window").width;
 
+const bannerImages = [
+  { id: "1", uri: "https://www.sellerapp.com/blog/wp-content/uploads/2023/02/mastering-amazon-banner-ads.jpg" },
+  { id: "2", uri: "https://graphicsfamily.com/wp-content/uploads/edd/2023/01/Free-Burger-Promo-Banner-Design.jpg" },
+  { id: "3", uri: "https://m.media-amazon.com/images/G/01/FireTV/Inline/5_BackgroundImageNotApproved._CB666803270_._TTW_.jpg" },
+];
+
+interface Category {
+  _id: string;
+  name: string;
+  description?: string;
+}
+
+interface Exam {
+  _id: string;
+  name: string;
+  description?: string;
+}
+
 export const options = {
-  headerShown: false, // Disable the default header
+  headerShown: false,
 };
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [categories, setCategories] = useState([]);
-  const [examCategories, setExamCategories] = useState([]);
-  const [banners] = useState([
-    { imageUrl: "https://media.coschedule.com/uploads/2023/01/marketing-mix-examples-pepsi-nitro.png?w=3840&q=75" },
-    { imageUrl: "https://framerusercontent.com/images/TTppo5qdcpbnym8gG1c5mt5EG4.png" },
-    { imageUrl: "https://narrato.io/blog/wp-content/uploads/2024/09/5-Ad-Copy-Examples.png" },
-  ]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [examCategories, setExamCategories] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [categoryTree, setCategoryTree] = useState([]);
-  const slideAnim = useRef(new Animated.Value(0)).current;
+  const [error, setError] = useState<string | null>(null);
+  const [index, setIndex] = useState(0);
+  const [routes] = useState([
+    { key: "explore", title: "Explore", icon: "compass" },
+    { key: "all_courses", title: "All Courses", icon: "book" },
+    { key: "my_courses", title: "My Courses", icon: "bookmark" },
+    { key: "profile", title: "Profile", icon: "account" },
+  ]);
+
+  const [currentBannerIndex, setCurrentBannerIndex] = useState(0);
+  const bannerFlatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
     fetchData();
-    fetchCategoryTree();
+  }, []);
 
-    // Slide animation
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(slideAnim, {
-          toValue: -screenWidth, // Slide to the first banner
-          duration: 1000, // Transition duration
-          easing: Easing.inOut(Easing.ease), // Ease in and out
-          useNativeDriver: true,
-        }),
-        Animated.delay(4000), // Stay for 2 seconds
-        Animated.timing(slideAnim, {
-          toValue: -screenWidth * 2, // Slide to the second banner
-          duration: 3000, // Transition duration
-          easing: Easing.inOut(Easing.ease), // Ease in and out
-          useNativeDriver: true,
-        }),
-        Animated.delay(4000), // Stay for 2 seconds
-        Animated.timing(slideAnim, {
-          toValue: 0, // Reset to the first banner
-          duration: 3000, // Transition duration
-          easing: Easing.inOut(Easing.ease), // Ease in and out
-          useNativeDriver: true,
-        }),
-        Animated.delay(4000), // Stay for 2 seconds
-      ])
-    ).start();
-  }, [slideAnim]);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentBannerIndex(prev => {
+        const next = (prev + 1) % bannerImages.length;
+        bannerFlatListRef.current?.scrollToIndex({ index: next, animated: true });
+        return next;
+      });
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Navigate directly when bottom tab changes
+  const handleTabChange = (newIndex: number) => {
+    setIndex(newIndex);
+    const routeKey = routes[newIndex].key;
+    switch (routeKey) {
+      case 'all_courses':
+        router.push('/all_courses');
+        break;
+      case 'my_courses':
+        router.push('/my_courses');
+        break;
+      case 'profile':
+        router.push('/profile');
+        break;
+      default:
+        break;
+    }
+  };
 
   const fetchData = async () => {
     try {
-      const [courseResponse, examResponse] = await Promise.all([
+      const [courseRes, examRes] = await Promise.all([
         fetch(`${config.CATEGORY_API}?type=course`),
         fetch(`${config.CATEGORY_API}?type=exam`),
       ]);
-
-      if (!courseResponse.ok || !examResponse.ok) {
-        throw new Error("Failed to fetch data");
-      }
-
-      const [courseData, examData] = await Promise.all([
-        courseResponse.json(),
-        examResponse.json(),
-      ]);
-
-      if (!courseData.success || !examData.success) {
-        throw new Error("Invalid data format received");
-      }
-
-      setCategories(courseData.data); // Set course categories
-      setExamCategories(examData.data); // Set exam categories
-    } catch (error) {
-      console.error("Error fetching data:", error);
-      setError(error.message);
+      if (!courseRes.ok || !examRes.ok) throw new Error("Failed to fetch data");
+      const [courseData, examData] = await Promise.all([courseRes.json(), examRes.json()]);
+      if (!courseData.success || !examData.success) throw new Error("Invalid data format received");
+      setCategories(courseData.data);
+      setExamCategories(examData.data);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchCategoryTree = async () => {
-    try {
-      const response = await fetch(`${config.CATEGORY_API}/tree`);
-      if (!response.ok) {
-        throw new Error("Failed to fetch category tree");
-      }
-      const result = await response.json();
-      setCategoryTree(result.data);
-    } catch (error) {
-      console.error("Error fetching category tree:", error);
-      setError(error.message);
-    }
+  const handleCategoryPress = (category: Category) => {
+    router.push({ pathname: '/category_details', params: { categoryId: category._id, categoryName: category.name } });
   };
 
-  const renderExamCategory = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.examCard}
-      onPress={() => handleCategoryPress(item)}
-    >
-      <View style={styles.examCardContent}>
-        <View style={styles.examDetails}>
-          <Text style={styles.examName}>{item.name}</Text>
-          {item.description && (
-            <Text style={styles.examDescription}>{item.description}</Text>
-          )}
-        </View>
+  const handleExamPress = (exam: Exam) => {
+    router.push({ pathname: '/category_details', params: { categoryId: exam._id, categoryName: exam.name } });
+  };
+
+  const renderCourseCategory = ({ item }: { item: Category }) => (
+    <TouchableOpacity style={styles.courseCategoryCard} onPress={() => handleCategoryPress(item)}>
+      <View style={styles.iconContainer}>
+        <FontAwesome name="book" size={24} color="#4169E1" />
+        <MaterialIcons name="volunteer-activism" size={24} color="#4169E1" style={styles.handIcon} />
       </View>
-    </TouchableOpacity>
-  );
-
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return "Good morning!";
-    if (hour < 18) return "Good afternoon!";
-    return "Good evening!";
-  };
-
-  const [index, setIndex] = useState(0);
-  const [routes] = useState([
-    { key: "explore", title: "Explore", icon: "compass" },
-    { key: "all_courses", title: "All Course", icon: "book" },
-    { key: "my_courses", title: "My Course", icon: "school" },
-    { key: "profile", title: "Profile", icon: "account" },
-  ]);
-
-  const renderCategoryTree = ({ item }) => {
-    const backgroundColor = item.type === 'exam' ? '#FF3B30' : '#4169E1';
-    
-    return (
-      <View style={styles.categoryTreeItem}>
-        <TouchableOpacity
-          style={[styles.categoryCard, { backgroundColor }]}
-          onPress={() => handleCategoryPress(item)}
-        >
-          <View style={styles.categoryHeader}>
-            <Text style={styles.categoryTitle}>{item.name}</Text>
-            {item.subcategories?.length > 0 && (
-              <AntDesign name="right" size={20} color="#FFF" />
-            )}
-          </View>
-          {item.description && (
-            <Text style={styles.categoryDescription}>{item.description}</Text>
-          )}
-        </TouchableOpacity>
-        {item.subcategories?.length > 0 && (
-          <View style={styles.subcategoriesContainer}>
-            <FlatList
-              data={item.subcategories}
-              renderItem={renderSubcategory}
-              keyExtractor={(subcat) => subcat._id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-            />
-          </View>
-        )}
-      </View>
-    );
-  };
-
-  const renderSubcategory = ({ item }) => (
-    <TouchableOpacity
-      style={styles.subcategoryCard}
-      onPress={() => handleCategoryPress(item)}
-    >
-      <Text style={styles.subcategoryName}>{item.name}</Text>
-      {item.subcategories?.length > 0 && (
-        <View style={styles.quizSetsIndicator}>
-          <Text style={styles.quizSetsCount}>
-            {item.subcategories.length} Sets
-          </Text>
-        </View>
-      )}
-    </TouchableOpacity>
-  );
-
-  const renderSlidingBanner = () => (
-    <View style={styles.bannerContainer}>
-      <Animated.View
-        style={[
-          styles.bannerSlider,
-          { transform: [{ translateX: slideAnim }] },
-        ]}
-      >
-        {banners.map((banner, index) => (
-          <View key={index} style={styles.banner}>
-            <Image source={{ uri: banner.imageUrl }} style={styles.bannerImage} />
-          </View>
+      <Text style={styles.courseCategoryName}>{item.name}</Text>
+      <View style={styles.ratingContainer}>
+        {[...Array(5)].map((_, i) => (
+          <AntDesign key={i} name="star" size={12} color={i < 4 ? "#FFD700" : "#e0e0e0"} />
         ))}
-      </Animated.View>
+        <Text style={styles.ratingText}>4.5 ({Math.floor(Math.random() * 200) + 100})</Text>
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderExamCategory = ({ item }: { item: Exam }) => (
+    <TouchableOpacity style={styles.examCategoryCard} onPress={() => handleExamPress(item)}>
+      <Image source={require('../assets/emblem.svg')} style={styles.examLogo} />
+      <View style={styles.examDetailContainer}>
+        <Text style={styles.examCategoryName}>{item.name}</Text>
+        <View style={styles.ratingContainer}>
+          {[...Array(5)].map((_, i) => (
+            <AntDesign key={i} name="star" size={12} color={i < 4 ? "#FFD700" : "#e0e0e0"} />
+          ))}
+          <Text style={styles.ratingText}>4.5 ({Math.floor(Math.random() * 200) + 100})</Text>
+        </View>
+        <Text style={styles.examDescription}>{item.description || "GK, Reasoning etc."}</Text>
+        <Text style={styles.examFullName}>The Assam Direct Recruitment Examination (ADRE) is a state-</Text>
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderBanner = () => (
+    <View style={styles.bannerContainer}>
+      <FlatList
+        ref={bannerFlatListRef}
+        data={bannerImages}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        keyExtractor={item => item.id}
+        renderItem={({ item }) => (
+          <Image source={{ uri: item.uri }} style={styles.bannerImage} resizeMode="cover" />
+        )}
+      />
     </View>
   );
 
-  const renderCourseCategories = () => (
-    <FlatList
-      data={categories}
-      renderItem={({ item }) => (
-        <TouchableOpacity
-          style={styles.courseCategoryCard}
-          onPress={() => handleCategoryPress(item)}
-        >
-          <Image source={{ uri: item.image }} style={styles.courseCategoryImage} />
-          <Text style={styles.courseCategoryName}>{item.name}</Text>
-        </TouchableOpacity>
-      )}
-      keyExtractor={(item) => item._id}
-      horizontal
-      showsHorizontalScrollIndicator={false}
-    />
-  );
-
-  const renderExamCategories = () => (
-    <FlatList
-      data={examCategories}
-      renderItem={({ item }) => (
-        <TouchableOpacity
-          style={styles.examCategoryCard}
-          onPress={() => handleExamPress(item)}
-        >
-          <Text style={styles.examCategoryName}>{item.name}</Text>
-        </TouchableOpacity>
-      )}
-      keyExtractor={(item) => item._id}
-    />
-  );
-
-  const handleCategoryPress = (category) => {
-    router.push({
-      pathname: "/category_details",
-      params: { categoryId: category._id, categoryName: category.name },
-    });
-  };
-
-  const handleExamPress = (exam) => {
-    router.push({
-      pathname: "/category_details",
-      params: { categoryId: exam._id, categoryName: exam.name },
-    });
-  };
-
-  const handleViewAllCourses = () => {
-    router.push('/all_courses');
-  };
-
-  const renderExploreScreen = () => {
+  const renderExplore = () => {
     if (loading) {
       return (
         <View style={styles.loadingContainer}>
@@ -259,7 +163,6 @@ export default function HomeScreen() {
         </View>
       );
     }
-
     if (error) {
       return (
         <View style={styles.errorContainer}>
@@ -270,94 +173,84 @@ export default function HomeScreen() {
         </View>
       );
     }
-
     return (
       <FlatList
-        data={examCategories} // Use exam categories as the main data
-        renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.examCategoryCard}
-            onPress={() => handleExamPress(item)}
-          >
-            <View style={styles.examCategoryContent}>
-              <Image source={{ uri: item.imageUrl }} style={styles.examCategoryImage} />
-              <View style={styles.examCategoryDetails}>
-                <Text style={styles.examCategoryName}>{item.name}</Text>
-                <Text style={styles.examCategoryDescription}>{item.description}</Text>
+        data={[{ key: 'banner' }, { key: 'courses' }, { key: 'exams' }]}
+        keyExtractor={item => item.key}
+        renderItem={({ item }) => {
+          if (item.key === 'banner') return renderBanner();
+          if (item.key === 'courses') {
+            return (
+              <View style={styles.sectionContainer}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>All Course Categories</Text>
+                  <AntDesign name="right" size={20} color="#FF6347" />
+                </View>
+                <FlatList
+                  data={categories}
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.courseCategoriesList}
+                  renderItem={renderCourseCategory}
+                  keyExtractor={c => c._id}
+                />
               </View>
+            );
+          }
+          return (
+            <View style={styles.sectionContainer}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>All Exam Categories</Text>
+                <AntDesign name="right" size={20} color="#FF6347" />
+              </View>
+              <FlatList
+                data={examCategories}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.examCategoriesList}
+                renderItem={renderExamCategory}
+                keyExtractor={e => e._id}
+              />
             </View>
-          </TouchableOpacity>
-        )}
-        keyExtractor={(item) => item._id}
+          );
+        }}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.examCategoryList}
-        ListHeaderComponent={
-          <>
-            <Text style={styles.greeting}>{getGreeting()}</Text>
-            {renderSlidingBanner()}
-            {renderCourseCategories()}
-          </>
-        }
       />
     );
-  };
-
-  const renderScene = ({ route }) => {
-    switch (route.key) {
-      case "explore":
-        return renderExploreScreen();
-      case "all_courses":
-        return (
-          <View style={styles.scene}>
-            <TouchableOpacity 
-              style={styles.navigateButton}
-              onPress={() => router.push('/all_courses')}
-            >
-              <Text style={styles.navigateButtonText}>Go to All Courses</Text>
-            </TouchableOpacity>
-          </View>
-        );
-      case "my_courses":
-        return (
-          <View style={styles.scene}>
-            <TouchableOpacity 
-              style={styles.navigateButton}
-              onPress={() => router.push('/my_courses')}
-            >
-              <Text style={styles.navigateButtonText}>Go to My Courses</Text>
-            </TouchableOpacity>
-          </View>
-        );
-      case "profile":
-        return (
-          <View style={styles.scene}>
-            <TouchableOpacity 
-              style={styles.navigateButton}
-              onPress={() => router.push('/profile')}
-            >
-              <Text style={styles.navigateButtonText}>Go to Profile</Text>
-            </TouchableOpacity>
-          </View>
-        );
-      default:
-        return null;
-    }
   };
 
   return (
     <BottomNavigation
       navigationState={{ index, routes }}
-      onIndexChange={setIndex}
-      renderScene={renderScene}
+      onIndexChange={handleTabChange}
+      renderScene={({ route }) =>
+        route.key === 'explore' ? renderExplore() : <View style={styles.scene} />
+      }
+      barStyle={styles.bottomBar}
+      renderIcon={({ route, focused }) => {
+        const color = focused ? '#2196F3' : '#757575';
+        switch (route.key) {
+          case 'explore':
+            return <FontAwesome name="search" size={24} color={color} />;
+          case 'all_courses':
+            return <FontAwesome name="th-large" size={24} color={color} />;
+          case 'my_courses':
+            return <Feather name="book" size={24} color={color} />;
+          case 'profile':
+            return <Feather name="user" size={24} color={color} />;
+          default:
+            return null;
+        }
+      }}
+      renderLabel={({ route, focused }) => (
+        <Text style={[styles.bottomBarLabel, { color: focused ? '#2196F3' : '#757575' }]}>
+          {route.title}
+        </Text>
+      )}
     />
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -386,141 +279,26 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "bold",
   },
-  greeting: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 8,
-    color: "#333",
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  horizontalScrollContent: {
-    paddingHorizontal: 8,
-  },
-  horizontalCourseCard: {
-    width: 120,
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    padding: 10,
-    marginHorizontal: 8,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  horizontalCategoryName: {
-    fontSize: 14,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginVertical: 4,
-  },
-  bannerContainer: {
-    height: 150,
-    overflow: "hidden",
-    marginHorizontal: 16,
-    marginVertical: 16,
-    borderRadius: 10,
-  },
-  bannerSlider: {
-    flexDirection: "row",
-    width: screenWidth * 3, // Adjust based on the number of banners
-  },
-  banner: {
-    width: screenWidth,
-    height: 150,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  bannerImage: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "cover",
-  },
-  examCategoryCard: {
-    flexDirection: "row",
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    padding: 10,
-    marginHorizontal: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  examCategoryContent: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  examCategoryImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    marginRight: 10,
-  },
-  examCategoryDetails: {
-    flex: 1,
-  },
-  examCategoryName: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  examCategoryDescription: {
-    fontSize: 14,
-    color: "#666",
-    marginTop: 4,
-  },
-  examCategoryRating: {
-    fontSize: 12,
-    color: "#666",
-    marginTop: 4,
-  },
-  examCategoryList: {
-    paddingBottom: 16,
-  },
-  courseCategoryCard: {
-    width: 120,
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    padding: 10,
-    marginHorizontal: 8,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  courseCategoryImage: {
-    width: 50,
-    height: 50,
-    marginBottom: 8,
-  },
-  courseCategoryName: {
-    fontSize: 14,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 4,
-  },
-  courseCategoryRating: {
-    fontSize: 12,
-    color: "#666",
-  },
+  sectionContainer: { marginVertical: 16 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, marginBottom: 12 },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
+  courseCategoriesList: { paddingLeft: 16, paddingRight: 8 },
+  courseCategoryCard: { width: 120, backgroundColor: '#fff', borderRadius: 12, padding: 16, marginRight: 12, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
+  iconContainer: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center', position: 'relative' },
+  handIcon: { position: 'absolute', bottom: -5, right: -5 },
+  courseCategoryName: { fontSize: 14, fontWeight: 'bold', textAlign: 'center', marginVertical: 8, color: '#333' },
+  ratingContainer: { flexDirection: 'row', alignItems: 'center' },
+  ratingText: { fontSize: 10, color: '#666', marginLeft: 4 },
+  examCategoriesList: { paddingHorizontal: 16 },
+  examCategoryCard: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
+  examLogo: { width: 70, height: 70, marginRight: 12 },
+  examDetailContainer: { flex: 1 },
+  examCategoryName: { fontSize: 18, fontWeight: 'bold', color: '#333' },
+  examDescription: { fontSize: 14, color: '#666', marginTop: 4 },
+  examFullName: { fontSize: 12, color: '#333', marginTop: 4 },
+  bannerContainer: { width: screenWidth, height: 200, marginBottom: 16 },
+  bannerImage: { width: screenWidth, height: '100%' },
+  bottomBar: { backgroundColor: '#fff', height: 60, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: -2 }, shadowOpacity: 0.1, shadowRadius: 4 },
+  bottomBarLabel: { fontSize: 12, marginTop: 2 },
+  scene: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 });

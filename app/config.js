@@ -1,11 +1,13 @@
 // Base API URL
-const API_BASE_URL = "http://192.168.1.22:3000/api";
+const API_BASE_URL = "http://192.168.1.21:3000/api";
 
 // API Endpoints
 const config = {
   CATEGORY_API: `${API_BASE_URL}/category`,
   AUTH_API: `${API_BASE_URL}/auth`,
   LEADERBOARD_API: `${API_BASE_URL}/leaderboard`,
+  USER_PROFILE_API: `${API_BASE_URL}/auth/profile`,
+  API_URL: API_BASE_URL,
 };
 
 export default config;

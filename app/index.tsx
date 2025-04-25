@@ -19,7 +19,7 @@ export default function WelcomeScreen() {
   return (
     <View style={styles.container}>
       <Image
-        source={{ uri: "https://raw.githubusercontent.com/Samudr4/prestudy-app/refs/heads/main/logo.jpg" }}
+        source={{ uri: "https://github.com/Samudr4/prestudy-app/blob/main/assets/logo.jpg" }}
         style={styles.logo}
       />
       <Text style={styles.title}>Crack Your Dream Exam with App Name</Text>
