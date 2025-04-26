@@ -1,26 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, StatusBar, Platform } from "react-native";
 import { useRouter } from "expo-router";
-import { FontAwesome } from '@expo/vector-icons';
-import config, { apiRequest } from "./config";
-import { Redirect } from "expo-router";
-import BottomNav from "./components/BottomNav";
+import { AntDesign } from '@expo/vector-icons';
+import config from "../config";
 
-interface Category {
-  _id: string;
-  name: string;
-  description?: string;
-}
-
-export default function AllCoursesRedirect() {
-  return <Redirect href="/(tabs)/all_courses" />;
-}
-
-export function AllCoursesScreen() {
+export default function AllCoursesScreen() {
   const router = useRouter();
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     fetchCategories();
@@ -28,39 +16,43 @@ export function AllCoursesScreen() {
 
   const fetchCategories = async () => {
     try {
-      setLoading(true);
-      
-      const response = await apiRequest(`${config.CATEGORY_API}?type=course`, {
-        method: 'GET'
-      });
-      
-      if (response.success && response.data) {
-        setCategories(Array.isArray(response.data) ? response.data : []);
-      } else {
-        throw new Error(response.message || "No categories available");
+      const response = await fetch(config.CATEGORY_API);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch categories: ${response.status}`);
       }
+      const data = await response.json();
+      if (!data.success || !data.data) {
+        throw new Error("No categories available");
+      }
+      setCategories(Array.isArray(data.data) ? data.data : []);
     } catch (error) {
       console.error("Error fetching categories:", error);
-      setError(error instanceof Error ? error.message : String(error));
+      setError(error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCategoryPress = (categoryId: string, categoryName: string) => {
-    router.push({
-      pathname: "/category_details",
-      params: { categoryId, categoryName }
-    });
-  };
+  const renderBookIcon = () => (
+    <View style={styles.bookIconContainer}>
+      <View style={styles.bookIconInner}>
+        <View style={styles.bookPage}></View>
+        <View style={styles.bookPage2}></View>
+      </View>
+      <View style={styles.handIcon}></View>
+    </View>
+  );
 
-  const renderCategory = ({ item }: { item: Category }) => (
+  const renderCategory = ({ item }) => (
     <TouchableOpacity 
       style={styles.card}
-      onPress={() => handleCategoryPress(item._id, item.name)}
+      onPress={() => router.push({
+        pathname: "/category_details",
+        params: { categoryId: item._id, categoryName: item.name }
+      })}
     >
-      <View style={styles.iconContainer}>
-        <FontAwesome name="book" size={24} color="#4169E1" />
+      <View style={styles.bookIconContainer}>
+        {renderBookIcon()}
       </View>
       <Text style={styles.categoryName}>{item.name}</Text>
       {item.description && (
@@ -114,8 +106,6 @@ export function AllCoursesScreen() {
         ListHeaderComponent={headerComponent}
         ListEmptyComponent={<Text style={styles.emptyMessage}>No categories available</Text>}
       />
-      
-      <BottomNav />
     </View>
   );
 }
@@ -185,22 +175,54 @@ const styles = StyleSheet.create({
       android: {
         elevation: 4,
       },
+      web: {
+        boxShadow: '0px 2px 4px rgba(0,0,0,0.2)',
+      },
     }),
   },
-  iconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#e8f0fe',
+  bookIconContainer: {
+    width: 45,
+    height: 45,
+    borderRadius: 10,
+    backgroundColor: '#f0f7ff',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
+  },
+  bookIconInner: {
+    width: 25,
+    height: 25,
+    position: 'relative',
+  },
+  bookPage: {
+    width: 25,
+    height: 25,
+    backgroundColor: '#4169E1',
+    borderRadius: 3,
+  },
+  bookPage2: {
+    width: 25,
+    height: 25,
+    backgroundColor: '#6F8CFF',
+    borderRadius: 3,
+    position: 'absolute',
+    top: -3,
+    left: -3,
+  },
+  handIcon: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#FF6347',
+    position: 'absolute',
+    bottom: -3,
+    right: -3,
   },
   categoryName: {
     fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
-    marginVertical: 8,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 5,
   },
   categoryDescription: {
     fontSize: 12,
@@ -209,6 +231,6 @@ const styles = StyleSheet.create({
   emptyMessage: {
     textAlign: 'center',
     color: '#666',
-    padding: 20,
+    paddingVertical: 20,
   }
-});
+}); 

@@ -1,219 +1,158 @@
-import React, { useState, useEffect, useRef } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, ActivityIndicator, Alert, Modal, FlatList, Platform } from "react-native";
-import { FontAwesome, Feather } from '@expo/vector-icons';
-import { useRouter } from "expo-router";
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, StatusBar, Alert, ActivityIndicator } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import config from "./config";
+import config, { apiRequest, clearAuth } from './config';
+import BottomNav from './components/BottomNav';
 
-// Gender options
-const GENDER_OPTIONS = [
-  { label: "Male", value: "male" },
-  { label: "Female", value: "female" },
-  { label: "Other", value: "other" },
-  { label: "Prefer not to say", value: "not_specified" }
-];
-
-interface UserProfile {
-  _id: string;
-  phoneNumber: string;
+interface UserData {
   firstName: string;
   lastName: string;
   email: string;
+  phoneNumber: string;
   gender: string;
   dateOfBirth: string;
 }
 
-// Add interface for gender option
-interface GenderOption {
-  label: string;
-  value: string;
-}
-
 export default function ProfileScreen() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [updating, setUpdating] = useState(false);
-  const [userData, setUserData] = useState<UserProfile | null>(null);
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [gender, setGender] = useState("");
-  const [dateOfBirth, setDateOfBirth] = useState("");
-  const [showGenderModal, setShowGenderModal] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [userData, setUserData] = useState<UserData>({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phoneNumber: '',
+    gender: '',
+    dateOfBirth: '',
+  });
+  const [loading, setLoading] = useState(false);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
   useEffect(() => {
-    fetchUserProfile();
+    fetchUserData();
   }, []);
 
-  const fetchUserProfile = async () => {
+  const fetchUserData = async () => {
     try {
-      setLoading(true);
-      // Get token from AsyncStorage
-      const token = await AsyncStorage.getItem('userToken');
-      const userPhone = await AsyncStorage.getItem('userPhone');
+      setIsLoadingProfile(true);
       
-      if (!token) {
-        // If no token, redirect to login
-        router.replace('/login');
-        return;
-      }
-
-      // Make the API call to get user profile
-      const response = await fetch(`${config.USER_PROFILE_API}?phone=${encodeURIComponent(userPhone || '')}`, {
+      // Get phone number from storage for development
+      const phoneNumber = await AsyncStorage.getItem('userPhone');
+      
+      const response = await apiRequest(config.USER_PROFILE_API, {
+        method: 'GET',
         headers: {
-          'Authorization': `Bearer ${token}`
+          'X-Phone-Number': phoneNumber || '', // For development mode
         }
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch profile data');
-      }
-
-      const data = await response.json();
-      if (data.success) {
-        setUserData(data.user);
-        setFirstName(data.user.firstName || '');
-        setLastName(data.user.lastName || '');
-        setEmail(data.user.email || '');
-        setPhoneNumber(data.user.phoneNumber || '');
-        setGender(data.user.gender || '');
-        setDateOfBirth(data.user.dateOfBirth || '');
-      } else {
-        throw new Error(data.message || 'Failed to fetch profile data');
+      
+      if (response.success && response.user) {
+        setUserData(response.user);
       }
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      console.error('Error fetching user data:', error);
+      Alert.alert('Error', 'Failed to load your profile. Please try again.');
+    } finally {
+      setIsLoadingProfile(false);
+    }
+  };
+
+  const handleUpdateProfile = async () => {
+    // Validate input
+    if (!userData.firstName || !userData.lastName) {
+      Alert.alert('Error', 'Please enter your name');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      const response = await apiRequest(config.USER_PROFILE_API, {
+        method: 'PUT',
+        body: JSON.stringify(userData)
+      });
       
-      // Fallback to dummy data for development/demo
-      const dummyUser: UserProfile = {
-        _id: '12345',
-        phoneNumber: '+919876543210',
-        firstName: 'user',
-        lastName: 'Firstname',
-        email: 'usermail',
-        gender: '',
-        dateOfBirth: ''
-      };
-      
-      setUserData(dummyUser);
-      setFirstName(dummyUser.firstName);
-      setLastName(dummyUser.lastName);
-      setEmail(dummyUser.email);
-      setPhoneNumber(dummyUser.phoneNumber);
-      setGender(dummyUser.gender);
-      setDateOfBirth(dummyUser.dateOfBirth);
-      
-      Alert.alert('Notice', 'Using demo data for profile. In production, this would fetch from the API.');
+      if (response.success) {
+        Alert.alert('Success', 'Profile updated successfully');
+      } else {
+        throw new Error(response.message);
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      Alert.alert('Error', error.message || 'Failed to update profile');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleUpdateProfile = async () => {
-    try {
-      setUpdating(true);
-      // Get token from AsyncStorage
-      const token = await AsyncStorage.getItem('userToken');
-      const userPhone = await AsyncStorage.getItem('userPhone');
-      
-      if (!token) {
-        router.replace('/login');
-        return;
-      }
+  const handleLogout = async () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Logout', 
+          style: 'destructive',
+          onPress: async () => {
+            await clearAuth();
+            router.replace('/login');
+          }
+        }
+      ]
+    );
+  };
 
-      // Make the API call to update user profile
-      const response = await fetch(`${config.USER_PROFILE_API}?phone=${encodeURIComponent(userPhone || '')}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+  const handleInputChange = (field: keyof UserData, value: string) => {
+    setUserData({ ...userData, [field]: value });
+  };
+
+  const handleGenderSelect = () => {
+    Alert.alert(
+      'Select Gender',
+      'Choose your gender',
+      [
+        { 
+          text: 'Male', 
+          onPress: () => handleInputChange('gender', 'Male') 
         },
-        body: JSON.stringify({
-          firstName,
-          lastName,
-          email,
-          phoneNumber: userPhone,
-          gender,
-          dateOfBirth
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to update profile');
-      }
-
-      const data = await response.json();
-      if (data.success) {
-        Alert.alert('Success', 'Profile updated successfully');
-        setUserData(data.user);
-      } else {
-        throw new Error(data.message || 'Failed to update profile');
-      }
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      
-      // For demo/development fallback
-      Alert.alert('Notice', 'Profile update simulated. In production, this would update the backend.');
-      setTimeout(() => {
-        setUserData({
-          ...userData!,
-          firstName,
-          lastName,
-          email,
-          gender,
-          dateOfBirth
-        });
-      }, 1000);
-    } finally {
-      setUpdating(false);
-    }
+        { 
+          text: 'Female', 
+          onPress: () => handleInputChange('gender', 'Female') 
+        },
+        { 
+          text: 'Other', 
+          onPress: () => handleInputChange('gender', 'Other') 
+        },
+        { 
+          text: 'Cancel', 
+          style: 'cancel' 
+        }
+      ]
+    );
   };
 
-  const renderGenderOption = ({ item }: { item: GenderOption }) => (
-    <TouchableOpacity 
-      style={styles.genderOption}
-      onPress={() => {
-        setGender(item.value);
-        setShowGenderModal(false);
-      }}
-    >
-      <Text style={[
-        styles.genderOptionText, 
-        gender === item.value && styles.selectedGenderText
-      ]}>
-        {item.label}
-      </Text>
-      {gender === item.value && (
-        <Feather name="check" size={20} color="#4169E1" />
-      )}
-    </TouchableOpacity>
-  );
-
-  // Format date string as DD/MM/YYYY
-  const formatDate = (dateString: string): string => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return dateString; // Return as is if invalid date
-    
-    const day = date.getDate().toString().padStart(2, '0');
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const year = date.getFullYear();
-    
-    return `${day}/${month}/${year}`;
+  const handleDateSelect = () => {
+    // In a real app, you would use a date picker
+    // For now, we'll use a simple prompt
+    Alert.prompt(
+      'Enter Date of Birth',
+      'Format: YYYY-MM-DD',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Save',
+          onPress: (text) => handleInputChange('dateOfBirth', text || '')
+        }
+      ],
+      'plain-text',
+      userData.dateOfBirth
+    );
   };
 
-  // Handle date change from date picker
-  const handleDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(Platform.OS === 'ios');
-    if (selectedDate) {
-      setDateOfBirth(selectedDate.toISOString().split('T')[0]);
-    }
-  };
-
-  if (loading) {
+  if (isLoadingProfile) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#4169E1" />
@@ -223,146 +162,102 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.container}>
+      <StatusBar backgroundColor="#fff" barStyle="dark-content" />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Feather name="arrow-left" size={24} color="#000" />
+        <TouchableOpacity onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Profile</Text>
-        <TouchableOpacity style={styles.editButton}>
-          <Feather name="edit-2" size={24} color="#4169E1" />
+        <TouchableOpacity onPress={handleLogout}>
+          <MaterialIcons name="logout" size={24} color="#4285F4" />
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView style={styles.content}>
         <View style={styles.profileImageContainer}>
-          <View style={styles.profileImage}>
-            <Feather name="user" size={40} color="#e74c3c" />
+          <View style={styles.profileImagePlaceholder}>
+            <Ionicons name="person" size={60} color="#ff9e9e" />
           </View>
         </View>
 
-        <Text style={styles.name}>{userData?.firstName} {userData?.lastName}</Text>
-        <Text style={styles.email}>{userData?.email}</Text>
-
-        <View style={styles.formContainer}>
+        <View style={styles.inputContainer}>
           <TextInput
             style={styles.input}
-            placeholder="What's your first name?"
-            value={firstName}
-            onChangeText={setFirstName}
+            placeholder="What's your first and last name?"
+            value={`${userData.firstName} ${userData.lastName}`.trim()}
+            onChangeText={(text) => {
+              const nameParts = text.split(' ');
+              handleInputChange('firstName', nameParts[0] || '');
+              handleInputChange('lastName', nameParts.slice(1).join(' ') || '');
+            }}
           />
+        </View>
 
+        <View style={styles.inputContainer}>
           <TextInput
             style={styles.input}
-            placeholder="And your last name?"
-            value={lastName}
-            onChangeText={setLastName}
+            placeholder="What's your Email address?"
+            value={userData.email}
+            onChangeText={(text) => handleInputChange('email', text)}
+            keyboardType="email-address"
           />
+        </View>
 
+        <View style={styles.inputContainer}>
           <View style={styles.phoneInputContainer}>
-            <View style={styles.countryFlag}>
-              <Text style={styles.flagText}>🇮🇳</Text>
+            <View style={styles.countryCodeContainer}>
+              <View style={styles.flagContainer}>
+                <Text>🇮🇳</Text>
+              </View>
+              <Text style={styles.countryCodeText}>+91</Text>
             </View>
             <TextInput
               style={styles.phoneInput}
-              placeholder="Phone number"
-              keyboardType="phone-pad"
-              value={phoneNumber}
-              onChangeText={setPhoneNumber}
-              editable={false} // Phone number is typically not editable after verification
+              placeholder="Enter Phone Number"
+              value={userData.phoneNumber.replace(/^\+91/, '')}
+              editable={false}
             />
           </View>
-
-          <TouchableOpacity 
-            style={styles.input} 
-            onPress={() => setShowGenderModal(true)}
-          >
-            <Text style={[styles.dropdownText, gender ? { color: '#000' } : {}]}>
-              {gender ? GENDER_OPTIONS.find(option => option.value === gender)?.label : "Select your gender"}
-            </Text>
-            <Feather name="chevron-down" size={20} color="#999" style={styles.dropdownIcon} />
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.input}
-            onPress={() => setShowDatePicker(true)}
-          >
-            <Text style={[styles.dropdownText, dateOfBirth ? { color: '#000' } : {}]}>
-              {dateOfBirth ? formatDate(dateOfBirth) : "What is your date of birth?"}
-            </Text>
-            <Feather name="calendar" size={20} color="#999" style={styles.dropdownIcon} />
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[styles.updateButton, updating && styles.disabledButton]}
-            onPress={handleUpdateProfile}
-            disabled={updating}
-          >
-            {updating ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.updateButtonText}>Update Profile</Text>
-            )}
-          </TouchableOpacity>
         </View>
+
+        <TouchableOpacity 
+          style={styles.inputContainer} 
+          onPress={handleGenderSelect}
+        >
+          <View style={styles.selectInput}>
+            <Text style={userData.gender ? styles.selectText : styles.placeholderText}>
+              {userData.gender || 'Select your gender'}
+            </Text>
+            <Ionicons name="chevron-down" size={24} color="#aaa" />
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.inputContainer} 
+          onPress={handleDateSelect}
+        >
+          <View style={styles.selectInput}>
+            <Text style={userData.dateOfBirth ? styles.selectText : styles.placeholderText}>
+              {userData.dateOfBirth || 'What is your date of birth?'}
+            </Text>
+            <Ionicons name="calendar-outline" size={24} color="#aaa" />
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[styles.updateButton, loading && styles.updateButtonDisabled]}
+          onPress={handleUpdateProfile}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.updateButtonText}>Update Profile</Text>
+          )}
+        </TouchableOpacity>
       </ScrollView>
 
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/home')}>
-          <Feather name="search" size={24} color="#999" />
-          <Text style={styles.navText}>Explore</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/all_courses')}>
-          <FontAwesome name="th-large" size={24} color="#999" />
-          <Text style={styles.navText}>All Course</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/my_courses')}>
-          <FontAwesome name="book" size={24} color="#999" />
-          <Text style={styles.navText}>My Course</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={[styles.navItem, styles.activeNavItem]}>
-          <Feather name="user" size={24} color="#4169E1" />
-          <Text style={[styles.navText, styles.activeNavText]}>Profile</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Gender selection modal */}
-      <Modal
-        visible={showGenderModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowGenderModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Gender</Text>
-              <TouchableOpacity onPress={() => setShowGenderModal(false)}>
-                <Feather name="x" size={24} color="#333" />
-              </TouchableOpacity>
-            </View>
-            <FlatList
-              data={GENDER_OPTIONS}
-              renderItem={renderGenderOption}
-              keyExtractor={(item) => item.value}
-              contentContainerStyle={styles.genderList}
-            />
-          </View>
-        </View>
-      </Modal>
-
-      {/* Date picker */}
-      {showDatePicker && (
-        <DateTimePicker
-          value={dateOfBirth ? new Date(dateOfBirth) : new Date()}
-          mode="date"
-          display="default"
-          onChange={handleDateChange}
-          maximumDate={new Date()}
-        />
-      )}
+      <BottomNav />
     </View>
   );
 }
@@ -370,182 +265,118 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: '#f5f5f5',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: "#f5f5f5",
+    backgroundColor: '#f5f5f5',
   },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#fff",
-    paddingTop: 10,
-    paddingBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
-    elevation: 2,
-  },
-  backButton: {
-    padding: 8,
+    paddingVertical: 12,
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: "bold",
-  },
-  editButton: {
-    padding: 8,
+    fontWeight: 'bold',
+    color: '#333',
   },
   content: {
-    paddingBottom: 20,
+    flex: 1,
+    padding: 16,
   },
   profileImageContainer: {
-    alignItems: "center",
-    marginTop: 20,
+    alignItems: 'center',
+    marginBottom: 30,
   },
-  profileImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: "#ffcdd2",
-    justifyContent: "center",
-    alignItems: "center",
+  profileImagePlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#ffcdd2',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  name: {
-    fontSize: 20,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginTop: 12,
-  },
-  email: {
-    fontSize: 16,
-    color: "#888",
-    textAlign: "center",
+  inputContainer: {
     marginBottom: 20,
   },
-  formContainer: {
-    paddingHorizontal: 20,
-  },
   input: {
-    backgroundColor: "#fff",
+    backgroundColor: 'white',
     borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
+    padding: 15,
     fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
   phoneInputContainer: {
-    flexDirection: "row",
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    marginBottom: 16,
-    alignItems: "center",
-  },
-  countryFlag: {
-    padding: 16,
-  },
-  flagText: {
-    fontSize: 24,
-  },
-  phoneInput: {
-    flex: 1,
-    padding: 16,
-    fontSize: 16,
-  },
-  dropdownText: {
-    color: "#999",
-    fontSize: 16,
-  },
-  dropdownIcon: {
-    position: "absolute",
-    right: 16,
-    top: 18,
-  },
-  updateButton: {
-    backgroundColor: "#0047AB",
-    borderRadius: 8,
-    padding: 16,
-    alignItems: "center",
-    marginTop: 20,
-    height: 56,
-    justifyContent: 'center',
-  },
-  disabledButton: {
-    backgroundColor: "#7a9dc9",
-  },
-  updateButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  bottomNav: {
-    flexDirection: "row",
-    backgroundColor: "#fff",
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: "#eee",
-  },
-  navItem: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 8,
-  },
-  activeNavItem: {
-    backgroundColor: "#f0f4ff",
-    borderRadius: 20,
-  },
-  navText: {
-    fontSize: 12,
-    marginTop: 4,
-    color: "#999",
-  },
-  activeNavText: {
-    color: "#4169E1",
-  },
-  // Gender dropdown modal styles
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '50%',
-    paddingBottom: 20,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  genderList: {
-    paddingHorizontal: 16,
-  },
-  genderOption: {
-    paddingVertical: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    backgroundColor: 'white',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
   },
-  genderOptionText: {
+  countryCodeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    paddingVertical: 15,
+    borderRightWidth: 1,
+    borderRightColor: '#e0e0e0',
+  },
+  flagContainer: {
+    marginRight: 5,
+  },
+  countryCodeText: {
     fontSize: 16,
     color: '#333',
   },
-  selectedGenderText: {
-    color: '#4169E1',
+  phoneInput: {
+    flex: 1,
+    padding: 15,
+    fontSize: 16,
+    color: '#999',
+  },
+  selectInput: {
+    backgroundColor: 'white',
+    borderRadius: 8,
+    padding: 15,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  selectText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  placeholderText: {
+    fontSize: 16,
+    color: '#aaa',
+  },
+  updateButton: {
+    backgroundColor: '#4285F4',
+    borderRadius: 8,
+    padding: 15,
+    alignItems: 'center',
+    marginTop: 10,
+    marginBottom: 30,
+  },
+  updateButtonDisabled: {
+    backgroundColor: '#a9a9a9',
+  },
+  updateButtonText: {
+    color: 'white',
+    fontSize: 16,
     fontWeight: 'bold',
   },
 });

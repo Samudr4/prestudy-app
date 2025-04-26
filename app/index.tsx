@@ -1,35 +1,57 @@
-export const options = {
-  headerShown: false, // Disable the default header
-};
+import { Redirect } from "expo-router";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useEffect, useState } from "react";
+import { View, ActivityIndicator, Text, StyleSheet, Image } from 'react-native';
+import { isAuthenticated, clearAuth } from "./config";
 
-import React from "react";
-import { View, Text, Image, TouchableOpacity, StyleSheet } from "react-native";
-import { useRouter } from "expo-router";
+export default function IndexPage() {
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
+  const [userAuthenticated, setUserAuthenticated] = useState(false);
 
-export default function WelcomeScreen() {
-  const router = useRouter();
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
 
-  const handleCategoryPress = (category) => {
-    router.push({
-      pathname: "/category_details",
-      params: { categoryId: category._id, categoryName: category.name },
-    });
+  const checkAuthStatus = async () => {
+    try {
+      // Simulate a brief splash screen delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Clear any stored auth tokens
+      await clearAuth();
+      
+      // Check if user is authenticated (should now be false)
+      const authenticated = await isAuthenticated();
+      setUserAuthenticated(authenticated);
+    } catch (error) {
+      console.error('Error checking auth status:', error);
+      setUserAuthenticated(false);
+    } finally {
+      setIsAuthChecking(false);
+    }
   };
 
+  if (isAuthChecking) {
+    return <SplashScreen />;
+  }
+
+  if (userAuthenticated) {
+    return <Redirect href="/(tabs)" />;
+  } else {
+    return <Redirect href="/login" />;
+  }
+}
+
+function SplashScreen() {
   return (
     <View style={styles.container}>
       <Image
-        source={{ uri: "https://github.com/Samudr4/prestudy-app/blob/main/assets/logo.jpg" }}
+        source={require('../assets/logo.png')}
         style={styles.logo}
+        resizeMode="contain"
       />
-      <Text style={styles.title}>Crack Your Dream Exam with App Name</Text>
-      <Text style={styles.subtitle}>Way to smart study</Text>
-      <TouchableOpacity style={styles.button} onPress={() => router.push("/login")}>
-        <Text style={styles.buttonText}>Sign up / Log in</Text>
-      </TouchableOpacity>
-      <TouchableOpacity onPress={() => router.push("/home")}>
-        <Text style={styles.skipText}>Skip</Text>
-      </TouchableOpacity>
+      <Text style={styles.appName}>PreStudy</Text>
+      <ActivityIndicator size="large" color="#4169E1" style={styles.loader} />
     </View>
   );
 }
@@ -37,42 +59,22 @@ export default function WelcomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#fff",
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
   },
   logo: {
-    width: 100,
-    height: 100,
-    marginBottom: 20,
-    borderRadius: 50,
+    width: 150,
+    height: 150,
+    marginBottom: 16,
   },
-  title: {
-    fontSize: 18,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 10,
+  appName: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#1a4aa1',
+    marginBottom: 32,
   },
-  subtitle: {
-    fontSize: 14,
-    color: "#666",
-    textAlign: "center",
-    marginBottom: 30,
-  },
-  button: {
-    backgroundColor: "#FF3B30",
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 5,
-    marginBottom: 10,
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  skipText: {
-    color: "#FF3B30",
-    fontSize: 14,
-  },
+  loader: {
+    marginTop: 20,
+  }
 });
